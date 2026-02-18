@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metasploit Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #00ff41; min-height: 100vh; }
+
+    .header { background: #111; border-bottom: 1px solid #00ff41; padding: 20px 30px; display: flex; align-items: center; gap: 20px; }
+    .header h1 { font-size: 1.4em; letter-spacing: 2px; }
+    .header .version { color: #666; font-size: 0.8em; }
+
+    .container { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 70px); }
+
+    /* Sidebar */
+    .sidebar { background: #0f0f0f; border-right: 1px solid #222; padding: 20px 0; }
+    .sidebar h3 { color: #00ff41; padding: 10px 20px; font-size: 0.75em; letter-spacing: 3px; text-transform: uppercase; }
+    .nav-item { display: block; width: 100%; padding: 12px 20px; background: none; border: none; color: #888; font-family: inherit;
+                font-size: 0.9em; text-align: left; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; }
+    .nav-item:hover { background: #1a1a1a; color: #00ff41; }
+    .nav-item.active { color: #00ff41; border-left-color: #00ff41; background: #1a1a1a; }
+    .nav-icon { margin-right: 10px; }
+
+    /* Main Content */
+    .main { padding: 30px; overflow-y: auto; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .panel h2 { margin-bottom: 20px; font-size: 1.1em; border-bottom: 1px solid #222; padding-bottom: 10px; }
+    .panel p.desc { color: #666; margin-bottom: 20px; font-size: 0.85em; }
+
+    /* Forms */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; color: #00ff41; margin-bottom: 6px; font-size: 0.8em; letter-spacing: 1px; text-transform: uppercase; }
+    .form-group input, .form-group select { width: 100%; padding: 10px 14px; background: #111; border: 1px solid #333; color: #00ff41;
+                                             font-family: inherit; font-size: 0.9em; border-radius: 4px; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #00ff41; }
+    .form-group select option { background: #111; color: #00ff41; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .btn { padding: 10px 24px; background: #00ff41; color: #000; border: none; font-family: inherit; font-weight: bold;
+           font-size: 0.9em; cursor: pointer; border-radius: 4px; letter-spacing: 1px; transition: all 0.2s; }
+    .btn:hover { background: #00cc33; }
+    .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+    .btn-secondary { background: none; border: 1px solid #00ff41; color: #00ff41; }
+    .btn-secondary:hover { background: #00ff4115; }
+
+    /* Results */
+    .output-box { background: #000; border: 1px solid #222; border-radius: 4px; padding: 16px; margin-top: 20px;
+                  max-height: 500px; overflow-y: auto; white-space: pre-wrap; font-size: 0.8em; color: #0f0; line-height: 1.6; }
+    .output-box .cmd { color: #ff6600; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 0.7em; letter-spacing: 1px; text-transform: uppercase; }
+    .status-running { background: #332200; color: #ff9900; }
+    .status-complete { background: #003300; color: #00ff41; }
+    .status-error { background: #330000; color: #ff3333; }
+
+    /* History Table */
+    .history-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 0.8em; }
+    .history-table th { text-align: left; padding: 10px; border-bottom: 1px solid #333; color: #00ff41; letter-spacing: 1px;
+                        text-transform: uppercase; font-size: 0.75em; }
+    .history-table td { padding: 10px; border-bottom: 1px solid #1a1a1a; color: #888; }
+    .history-table tr:hover td { color: #ccc; background: #111; cursor: pointer; }
+
+    /* Module list */
+    .module-list { list-style: none; }
+    .module-list li { padding: 6px 0; color: #888; font-size: 0.85em; }
+    .module-list li code { color: #00ff41; }
+
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #333; border-top-color: #00ff41;
+               border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .warning-box { background: #1a1a00; border: 1px solid #666600; border-radius: 4px; padding: 14px; margin-bottom: 20px;
+                   color: #cccc00; font-size: 0.8em; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>&gt;_ METASPLOIT DASHBOARD</h1>
+  <span class="version">v6.4 | Local Interface | 127.0.0.1:4567</span>
+</div>
+
+<div class="container">
+  <div class="sidebar">
+    <h3>Reconnaissance</h3>
+    <button class="nav-item active" onclick="showPanel('nmap')"><span class="nav-icon">&#9655;</span> Nmap Scanner</button>
+    <button class="nav-item" onclick="showPanel('msf-scan')"><span class="nav-icon">&#9655;</span> MSF Aux Scanner</button>
+    <button class="nav-item" onclick="showPanel('search')"><span class="nav-icon">&#9655;</span> Module Search</button>
+
+    <h3 style="margin-top: 20px;">Generation</h3>
+    <button class="nav-item" onclick="showPanel('payload')"><span class="nav-icon">&#9655;</span> Payload Generator</button>
+
+    <h3 style="margin-top: 20px;">Database</h3>
+    <button class="nav-item" onclick="showPanel('database')"><span class="nav-icon">&#9655;</span> DB Explorer</button>
+
+    <h3 style="margin-top: 20px;">History</h3>
+    <button class="nav-item" onclick="showPanel('history')"><span class="nav-icon">&#9655;</span> Scan History</button>
+
+    <h3 style="margin-top: 20px;">Reference</h3>
+    <button class="nav-item" onclick="showPanel('modules')"><span class="nav-icon">&#9655;</span> Common Modules</button>
+  </div>
+
+  <div class="main">
+    <!-- ─── Nmap ─────────────────────────────── -->
+    <div id="panel-nmap" class="panel active">
+      <h2>&gt; Nmap Scanner</h2>
+      <p class="desc">Network discovery and security auditing. Results are stored in the Metasploit database.</p>
+      <div class="warning-box">Only scan targets you own or have explicit written authorization to test.</div>
+      <div class="form-group">
+        <label>Target (IP / hostname / CIDR)</label>
+        <input type="text" id="nmap-target" placeholder="e.g. 192.168.1.0/24 or localhost">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Scan Type</label>
+          <select id="nmap-type">
+            <option value="quick">Quick (-T4 -F)</option>
+            <option value="service" selected>Service Detection (-sV -sC)</option>
+            <option value="full">Full Scan (-sV -sC -A -p-)</option>
+            <option value="udp">UDP Top 100 (-sU)</option>
+            <option value="stealth">Stealth SYN (-sS -T2)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Ports (optional)</label>
+          <input type="text" id="nmap-ports" placeholder="e.g. 80,443,8080 or 1-1000">
+        </div>
+      </div>
+      <button class="btn" onclick="runNmap()">Run Scan</button>
+      <div id="nmap-output" class="output-box" style="display:none;"></div>
+    </div>
+
+    <!-- ─── MSF Aux Scanner ──────────────────── -->
+    <div id="panel-msf-scan" class="panel">
+      <h2>&gt; Metasploit Auxiliary Scanner</h2>
+      <p class="desc">Run any Metasploit auxiliary module against a target.</p>
+      <div class="warning-box">Only scan targets you own or have explicit written authorization to test.</div>
+      <div class="form-group">
+        <label>Target (RHOSTS)</label>
+        <input type="text" id="msf-target" placeholder="e.g. 192.168.1.100">
+      </div>
+      <div class="form-group">
+        <label>Module</label>
+        <input type="text" id="msf-module" placeholder="e.g. auxiliary/scanner/http/http_version" list="common-aux-modules">
+        <datalist id="common-aux-modules">
+          <option value="auxiliary/scanner/portscan/tcp">
+          <option value="auxiliary/scanner/http/http_version">
+          <option value="auxiliary/scanner/http/title">
+          <option value="auxiliary/scanner/http/dir_scanner">
+          <option value="auxiliary/scanner/http/ssl_version">
+          <option value="auxiliary/scanner/smb/smb_version">
+          <option value="auxiliary/scanner/ssh/ssh_version">
+          <option value="auxiliary/scanner/ftp/ftp_version">
+          <option value="auxiliary/scanner/smtp/smtp_version">
+          <option value="auxiliary/scanner/mysql/mysql_version">
+          <option value="auxiliary/scanner/rdp/rdp_scanner">
+          <option value="auxiliary/scanner/dns/dns_amp">
+          <option value="auxiliary/scanner/http/robots_txt">
+          <option value="auxiliary/scanner/http/options">
+          <option value="auxiliary/scanner/http/trace">
+          <option value="auxiliary/scanner/ssl/openssl_heartbleed">
+        </datalist>
+      </div>
+      <button class="btn" onclick="runMsf()">Run Module</button>
+      <div id="msf-output" class="output-box" style="display:none;"></div>
+    </div>
+
+    <!-- ─── Module Search ────────────────────── -->
+    <div id="panel-search" class="panel">
+      <h2>&gt; Module Search</h2>
+      <p class="desc">Search all Metasploit modules by keyword, CVE, platform, or type.</p>
+      <div class="form-group">
+        <label>Search Query</label>
+        <input type="text" id="search-query" placeholder="e.g. type:exploit platform:linux apache, or cve:2021-44228">
+      </div>
+      <button class="btn" onclick="runSearch()">Search</button>
+      <div id="search-output" class="output-box" style="display:none;"></div>
+    </div>
+
+    <!-- ─── Payload Generator ────────────────── -->
+    <div id="panel-payload" class="panel">
+      <h2>&gt; Payload Generator (msfvenom)</h2>
+      <p class="desc">Generate payloads in various formats for authorized testing.</p>
+      <div class="form-group">
+        <label>Payload</label>
+        <input type="text" id="payload-name" placeholder="e.g. linux/x64/meterpreter/reverse_tcp" list="common-payloads">
+        <datalist id="common-payloads">
+          <option value="linux/x64/meterpreter/reverse_tcp">
+          <option value="linux/x64/shell_reverse_tcp">
+          <option value="windows/x64/meterpreter/reverse_tcp">
+          <option value="windows/x64/shell_reverse_tcp">
+          <option value="php/meterpreter/reverse_tcp">
+          <option value="python/meterpreter/reverse_tcp">
+          <option value="java/meterpreter/reverse_tcp">
+          <option value="cmd/unix/reverse_bash">
+        </datalist>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Format</label>
+          <select id="payload-format">
+            <option value="raw">raw</option>
+            <option value="elf" selected>elf</option>
+            <option value="exe">exe</option>
+            <option value="dll">dll</option>
+            <option value="python">python</option>
+            <option value="ruby">ruby</option>
+            <option value="php">php</option>
+            <option value="jsp">jsp</option>
+            <option value="war">war</option>
+            <option value="bash">bash</option>
+            <option value="c">c</option>
+            <option value="hex">hex</option>
+            <option value="base64">base64</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>LPORT</label>
+          <input type="text" id="payload-lport" placeholder="4444" value="4444">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>LHOST</label>
+        <input type="text" id="payload-lhost" placeholder="e.g. 192.168.1.50">
+      </div>
+      <button class="btn" onclick="runPayload()">Generate Payload</button>
+      <div id="payload-output" class="output-box" style="display:none;"></div>
+    </div>
+
+    <!-- ─── Database ─────────────────────────── -->
+    <div id="panel-database" class="panel">
+      <h2>&gt; Database Explorer</h2>
+      <p class="desc">Query stored reconnaissance data from the Metasploit database.</p>
+      <div class="form-group">
+        <label>Query Type</label>
+        <select id="db-query-type">
+          <option value="hosts">Hosts</option>
+          <option value="services">Services</option>
+          <option value="vulns">Vulnerabilities</option>
+          <option value="creds">Credentials</option>
+          <option value="loot">Loot</option>
+        </select>
+      </div>
+      <button class="btn" onclick="runDbQuery()">Query</button>
+      <div id="db-output" class="output-box" style="display:none;"></div>
+    </div>
+
+    <!-- ─── History ──────────────────────────── -->
+    <div id="panel-history" class="panel">
+      <h2>&gt; Scan History</h2>
+      <p class="desc">View all scans run during this session.</p>
+      <button class="btn btn-secondary" onclick="loadHistory()">Refresh</button>
+      <table class="history-table">
+        <thead><tr><th>ID</th><th>Tool</th><th>Target</th><th>Status</th><th>Started</th><th></th></tr></thead>
+        <tbody id="history-body"></tbody>
+      </table>
+      <div id="history-detail" class="output-box" style="display:none;"></div>
+    </div>
+
+    <!-- ─── Common Modules Reference ─────────── -->
+    <div id="panel-modules" class="panel">
+      <h2>&gt; Common Modules Reference</h2>
+      <p class="desc">Quick reference for frequently used Metasploit modules.</p>
+
+      <h3 style="margin: 16px 0 8px; color: #ff9900; font-size: 0.85em;">Scanners</h3>
+      <ul class="module-list">
+        <li><code>auxiliary/scanner/portscan/tcp</code> - TCP port scanner</li>
+        <li><code>auxiliary/scanner/portscan/syn</code> - SYN port scanner</li>
+        <li><code>auxiliary/scanner/http/http_version</code> - HTTP server version</li>
+        <li><code>auxiliary/scanner/http/title</code> - HTTP page titles</li>
+        <li><code>auxiliary/scanner/http/dir_scanner</code> - Directory brute force</li>
+        <li><code>auxiliary/scanner/http/robots_txt</code> - robots.txt finder</li>
+        <li><code>auxiliary/scanner/http/ssl_version</code> - SSL/TLS version detection</li>
+        <li><code>auxiliary/scanner/smb/smb_version</code> - SMB version detection</li>
+        <li><code>auxiliary/scanner/smb/smb_enumshares</code> - SMB share enumeration</li>
+        <li><code>auxiliary/scanner/ssh/ssh_version</code> - SSH version detection</li>
+        <li><code>auxiliary/scanner/ftp/ftp_version</code> - FTP version detection</li>
+        <li><code>auxiliary/scanner/mysql/mysql_version</code> - MySQL version</li>
+        <li><code>auxiliary/scanner/rdp/rdp_scanner</code> - RDP detection</li>
+        <li><code>auxiliary/scanner/smtp/smtp_version</code> - SMTP version</li>
+        <li><code>auxiliary/scanner/dns/dns_amp</code> - DNS amplification check</li>
+      </ul>
+
+      <h3 style="margin: 16px 0 8px; color: #ff9900; font-size: 0.85em;">Vulnerability Checks</h3>
+      <ul class="module-list">
+        <li><code>auxiliary/scanner/ssl/openssl_heartbleed</code> - Heartbleed (CVE-2014-0160)</li>
+        <li><code>auxiliary/scanner/http/ms15_034_http_sys_memory_dump</code> - MS15-034</li>
+        <li><code>auxiliary/scanner/smb/smb_ms17_010</code> - EternalBlue check</li>
+        <li><code>auxiliary/scanner/http/log4shell_scanner</code> - Log4Shell (CVE-2021-44228)</li>
+      </ul>
+
+      <h3 style="margin: 16px 0 8px; color: #ff9900; font-size: 0.85em;">Brute Force</h3>
+      <ul class="module-list">
+        <li><code>auxiliary/scanner/ssh/ssh_login</code> - SSH brute force</li>
+        <li><code>auxiliary/scanner/ftp/ftp_login</code> - FTP brute force</li>
+        <li><code>auxiliary/scanner/http/http_login</code> - HTTP basic auth brute force</li>
+        <li><code>auxiliary/scanner/smb/smb_login</code> - SMB brute force</li>
+        <li><code>auxiliary/scanner/mysql/mysql_login</code> - MySQL brute force</li>
+      </ul>
+
+      <h3 style="margin: 16px 0 8px; color: #ff9900; font-size: 0.85em;">Post-Exploitation</h3>
+      <ul class="module-list">
+        <li><code>post/multi/gather/env</code> - Gather environment variables</li>
+        <li><code>post/linux/gather/enum_system</code> - Linux system enumeration</li>
+        <li><code>post/linux/gather/hashdump</code> - Dump Linux password hashes</li>
+        <li><code>post/linux/gather/enum_network</code> - Network configuration</li>
+        <li><code>post/multi/manage/shell_to_meterpreter</code> - Upgrade shell</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    event.target.closest('.nav-item').classList.add('active');
+  }
+
+  function pollResult(id, outputEl) {
+    const poll = setInterval(() => {
+      fetch('/results/' + id)
+        .then(r => r.json())
+        .then(data => {
+          if (data.command) {
+            outputEl.innerHTML = '<span class="cmd">&gt; ' + escHtml(data.command) + '</span>\n\n';
+          }
+          if (data.status === 'running') {
+            outputEl.innerHTML += '<span class="spinner"></span> Scan in progress...';
+          } else {
+            clearInterval(poll);
+            outputEl.innerHTML += escHtml(data.output || '(no output)');
+            if (data.file) {
+              outputEl.innerHTML += '\n\n[+] Payload saved to: ' + escHtml(data.file);
+            }
+          }
+        });
+    }, 2000);
+  }
+
+  function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function runNmap() {
+    const target = document.getElementById('nmap-target').value;
+    const scan_type = document.getElementById('nmap-type').value;
+    const ports = document.getElementById('nmap-ports').value;
+    const out = document.getElementById('nmap-output');
+    out.style.display = 'block';
+    out.innerHTML = '<span class="spinner"></span> Starting nmap scan...';
+    fetch('/scan/nmap', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'target=' + encodeURIComponent(target) + '&scan_type=' + encodeURIComponent(scan_type) + '&ports=' + encodeURIComponent(ports)
+    }).then(r => r.json()).then(data => {
+      if (data.error) { out.textContent = 'Error: ' + data.error; return; }
+      pollResult(data.id, out);
+    });
+  }
+
+  function runMsf() {
+    const target = document.getElementById('msf-target').value;
+    const mod = document.getElementById('msf-module').value;
+    const out = document.getElementById('msf-output');
+    out.style.display = 'block';
+    out.innerHTML = '<span class="spinner"></span> Starting module...';
+    fetch('/scan/msf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'target=' + encodeURIComponent(target) + '&module=' + encodeURIComponent(mod)
+    }).then(r => r.json()).then(data => {
+      if (data.error) { out.textContent = 'Error: ' + data.error; return; }
+      pollResult(data.id, out);
+    });
+  }
+
+  function runSearch() {
+    const query = document.getElementById('search-query').value;
+    const out = document.getElementById('search-output');
+    out.style.display = 'block';
+    out.innerHTML = '<span class="spinner"></span> Searching modules...';
+    fetch('/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'query=' + encodeURIComponent(query)
+    }).then(r => r.json()).then(data => {
+      if (data.error) { out.textContent = 'Error: ' + data.error; return; }
+      pollResult(data.id, out);
+    });
+  }
+
+  function runPayload() {
+    const payload = document.getElementById('payload-name').value;
+    const format = document.getElementById('payload-format').value;
+    const lhost = document.getElementById('payload-lhost').value;
+    const lport = document.getElementById('payload-lport').value;
+    const out = document.getElementById('payload-output');
+    out.style.display = 'block';
+    out.innerHTML = '<span class="spinner"></span> Generating payload...';
+    fetch('/generate/payload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'payload=' + encodeURIComponent(payload) + '&format=' + encodeURIComponent(format) +
+            '&lhost=' + encodeURIComponent(lhost) + '&lport=' + encodeURIComponent(lport)
+    }).then(r => r.json()).then(data => {
+      if (data.error) { out.textContent = 'Error: ' + data.error; return; }
+      pollResult(data.id, out);
+    });
+  }
+
+  function runDbQuery() {
+    const qtype = document.getElementById('db-query-type').value;
+    const out = document.getElementById('db-output');
+    out.style.display = 'block';
+    out.innerHTML = '<span class="spinner"></span> Querying database...';
+    fetch('/db/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'query_type=' + encodeURIComponent(qtype)
+    }).then(r => r.json()).then(data => {
+      if (data.error) { out.textContent = 'Error: ' + data.error; return; }
+      pollResult(data.id, out);
+    });
+  }
+
+  function loadHistory() {
+    fetch('/results').then(r => r.json()).then(data => {
+      const tbody = document.getElementById('history-body');
+      tbody.innerHTML = '';
+      data.reverse().forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + escHtml(r.id) + '</td><td>' + escHtml(r.tool) + '</td><td>' + escHtml(r.target || '-') +
+          '</td><td><span class="status-badge status-' + r.status + '">' + r.status + '</span></td><td>' +
+          escHtml(r.started || '-') + '</td><td><button class="btn btn-secondary" style="padding:4px 10px;font-size:0.7em;" onclick="viewResult(\'' + r.id + '\')">View</button></td>';
+        tbody.appendChild(tr);
+      });
+    });
+  }
+
+  function viewResult(id) {
+    const out = document.getElementById('history-detail');
+    out.style.display = 'block';
+    out.innerHTML = '<span class="spinner"></span> Loading...';
+    fetch('/results/' + id).then(r => r.json()).then(data => {
+      out.innerHTML = '';
+      if (data.command) out.innerHTML += '<span class="cmd">&gt; ' + escHtml(data.command) + '</span>\n\n';
+      out.innerHTML += escHtml(data.output || '(no output)');
+    });
+  }
+</script>
+
+</body>
+</html>
