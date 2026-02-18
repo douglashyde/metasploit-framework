@@ -79,6 +79,31 @@ if [ "$OS" = "Darwin" ]; then
   cd "$MSF_ROOT"
   rbenv local "$RUBY_REQUIRED"
   rbenv rehash
+
+  # Add rbenv init to shell profile so it persists in new terminals
+  SHELL_NAME="$(basename "$SHELL")"
+  if [ "$SHELL_NAME" = "zsh" ]; then
+    PROFILE="$HOME/.zshrc"
+    INIT_CMD='eval "$(rbenv init - zsh)"'
+  else
+    PROFILE="$HOME/.bash_profile"
+    INIT_CMD='eval "$(rbenv init - bash)"'
+  fi
+
+  if ! grep -qF 'rbenv init' "$PROFILE" 2>/dev/null; then
+    echo "" >> "$PROFILE"
+    echo '# rbenv Ruby version manager (added by Metasploit installer)' >> "$PROFILE"
+    echo "$INIT_CMD" >> "$PROFILE"
+    echo "[+] Added rbenv init to $PROFILE"
+  fi
+
+  # Also add postgresql@16 to PATH if not already there
+  PG_PATH_LINE='export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"'
+  if ! grep -qF 'postgresql@16' "$PROFILE" 2>/dev/null; then
+    echo "$PG_PATH_LINE" >> "$PROFILE"
+    echo "[+] Added postgresql@16 to PATH in $PROFILE"
+  fi
+
   echo "[+] Using Ruby $(ruby --version)"
   echo "[+] System packages installed via Homebrew."
 
