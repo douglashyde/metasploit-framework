@@ -1,9 +1,13 @@
 #!/bin/bash
 # Metasploit Framework - Full Dependency Installation Script
-# Supports macOS (Homebrew) and Ubuntu/Debian (apt)
-# Usage: sudo ./scripts/setup/install_dependencies.sh
+# Supports macOS (Homebrew + rbenv) and Ubuntu/Debian (apt)
+#
+# macOS:  bash scripts/setup/install_dependencies.sh   (no sudo)
+# Linux:  sudo bash scripts/setup/install_dependencies.sh
 
 set -e
+
+RUBY_REQUIRED="3.3.7"
 
 echo "[*] Metasploit Framework Dependency Installer"
 echo "[*] ==========================================="
@@ -48,19 +52,34 @@ if [ "$OS" = "Darwin" ]; then
     nmap \
     openssl@3 \
     postgresql@16 \
+    rbenv \
+    ruby-build \
     readline \
-    ruby \
     sqlite \
     wget \
     zlib
 
-  # Ensure brew ruby is on PATH
   BREW_PREFIX="$(brew --prefix)"
-  export PATH="$BREW_PREFIX/opt/ruby/bin:$BREW_PREFIX/opt/postgresql@16/bin:$PATH"
 
   # Link libpq headers for pg gem
   brew link --force libpq 2>/dev/null || true
 
+  # ---- Install Ruby via rbenv (Metasploit needs Ruby 3.x, not 4.x) ----
+  eval "$(rbenv init - bash)"
+  export PATH="$BREW_PREFIX/opt/postgresql@16/bin:$PATH"
+
+  if ! rbenv versions --bare | grep -qF "$RUBY_REQUIRED"; then
+    echo "[*] Installing Ruby $RUBY_REQUIRED via rbenv (this may take a few minutes)..."
+    rbenv install "$RUBY_REQUIRED"
+  else
+    echo "[+] Ruby $RUBY_REQUIRED already installed via rbenv."
+  fi
+
+  # Set this Ruby as the version for the project
+  cd "$MSF_ROOT"
+  rbenv local "$RUBY_REQUIRED"
+  rbenv rehash
+  echo "[+] Using Ruby $(ruby --version)"
   echo "[+] System packages installed via Homebrew."
 
 elif [ -f /etc/debian_version ]; then
@@ -226,5 +245,4 @@ echo "Usage:"
 echo "  cd $MSF_ROOT"
 echo "  bundle exec ruby msfconsole       # Interactive console"
 echo "  bundle exec ruby msfvenom -h      # Payload generator"
-echo "  bundle exec ruby tools/dashboard/app.rb  # Web dashboard"
 echo ""
