@@ -1,4 +1,5 @@
 .bundle
+vendor/bundle
 Gemfile.local
 Gemfile.local.lock
 # Rubymine project directory
